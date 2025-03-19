@@ -12,8 +12,6 @@
   extern volatile long _calibrateStepPosition;
 #endif
 
-constexpr float VELOCITY_MIN = (SERVO_ANALOG_WRITE_RANGE * SERVO_ANALOG_WRITE_RANGE_MIN);
-
 ServoMotor *servoMotorInstance[9];
 IRAM_ATTR void moveServoMotorAxis1() { servoMotorInstance[0]->move(); }
 IRAM_ATTR void moveServoMotorAxis2() { servoMotorInstance[1]->move(); }
