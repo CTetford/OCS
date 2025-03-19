@@ -120,7 +120,7 @@ class ServoMotor : public Motor {
 
     // get encoder count
     int32_t getEncoderCount() { return encoder->count; }
-    
+
     // updates PID and sets servo motor power/direction
     void poll();
 
