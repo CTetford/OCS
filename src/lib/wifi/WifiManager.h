@@ -15,7 +15,7 @@
   #include <WiFi.h>
   #include <WiFiClient.h>
   #include <WiFiAP.h>
-  #if MDNS_SERVER == ON
+  #if MDNS_SERVER == ON || MDNS_CLIENT == ON
     #include <ESPmDNS.h>
   #endif
 #elif defined(ESP8266)
@@ -36,8 +36,8 @@ typedef struct AccessPointSettings {
 } AccessPointSettings;
 
 typedef struct StationSettings {
-  char ssid[32];
-  char pwd[32];
+  char ssid[33];
+  char pwd[64];
   bool dhcpEnabled;
   uint8_t ip[4];
   uint8_t gw[4];
@@ -48,9 +48,9 @@ typedef struct StationSettings {
 
 #ifndef WifiStationCount
   // number of wifi stations supported, between 1 and 6
-  #define WifiStationCount 3
+  #define WifiStationCount 1
 #endif
-#define WifiSettingsSize (112 + WifiStationCount*113)
+#define WifiSettingsSize (112 + WifiStationCount*146)
 typedef struct WifiSettings {
   char masterPassword[32];
 
