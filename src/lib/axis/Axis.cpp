@@ -56,6 +56,7 @@ Axis::Axis(uint8_t axisNumber, const AxisPins *pins, const AxisSettings *setting
 bool Axis::init(Motor *motor) {
   this->motor = motor;
   motor->getDefaultParameters(&settings.param1, &settings.param2, &settings.param3, &settings.param4, &settings.param5, &settings.param6);
+  motor->setStepsPerMeasure(settings.stepsPerMeasure);
   AxisStoredSettings defaultSettings = settings;
 
   // check for reverting axis settings in NV

@@ -31,6 +31,9 @@ class Motor {
     // set motor default parameters
     void setDefaultParameters(float param1, float param2, float param3, float param4, float param5, float param6);
 
+    // set steps per measure
+    virtual void setStepsPerMeasure(double steps) { stepsPerMeasure = steps; }
+    
     // set motor parameters
     virtual void setParameters(float param1, float param2, float param3, float param4, float param5, float param6);
 
@@ -180,6 +183,7 @@ class Motor {
     volatile long motorSteps = 0;              // where the motor is not counting backlash
     volatile long indexSteps = 0;              // for absolute motor position to axis position
     volatile long step = 1;                    // step size, and for direction control
+    double stepsPerMeasure = 1.0;              // steps per unit of measure (degrees, microns, etc.)
 
     float default_param1 = 0, default_param2 = 0, default_param3 = 0, default_param4 = 0, default_param5 = 0, default_param6 = 0;
 };

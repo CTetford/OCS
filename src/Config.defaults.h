@@ -305,6 +305,12 @@
 #ifndef DEFAULT_POWER_DOWN_TIME
 #define DEFAULT_POWER_DOWN_TIME        30000                       // motor power down time, in milliseconds
 #endif
+#ifndef SERVO_DEADBAND_ENABLED
+#define SERVO_DEADBAND_ENABLED         OFF                         // OFF or ON enables power down when velocity < min and within position deadband 
+#endif
+#ifndef SERVO_DEADBAND_TOLERANCE
+#define SERVO_DEADBAND_TOLERANCE       0.5F                        // deadband tolerance in degrees, within this position power is removed
+#endif
 #ifndef AXIS1_DRIVER_MODEL
 #define AXIS1_DRIVER_MODEL             OFF                         // specify a driver to enable
 #endif

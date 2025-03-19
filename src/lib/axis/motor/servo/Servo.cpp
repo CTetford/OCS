@@ -12,6 +12,8 @@
   extern volatile long _calibrateStepPosition;
 #endif
 
+constexpr float VELOCITY_MIN = (SERVO_ANALOG_WRITE_RANGE * SERVO_ANALOG_WRITE_RANGE_MIN);
+
 ServoMotor *servoMotorInstance[9];
 IRAM_ATTR void moveServoMotorAxis1() { servoMotorInstance[0]->move(); }
 IRAM_ATTR void moveServoMotorAxis2() { servoMotorInstance[1]->move(); }
@@ -299,6 +301,14 @@ void ServoMotor::poll() {
   if (enabled) feedback->poll();
 
   float velocity = velocityEstimate + control->out;
+  #if SERVO_DEADBAND_ENABLED == ON
+    // If not slewing and encoderCounts is within deadband tolerance of motorCounts, disable the motor
+    if (!slewing && 
+        fabs(velocity) < VELOCITY_MIN &&
+        labs(motorCounts - encoderCounts) <= SERVO_DEADBAND_TOLERANCE * stepsPerMeasure) {
+      enable(false);
+    }
+  #endif
   if (!enabled) velocity = 0.0F;
 
   #ifdef ABSOLUTE_ENCODER_CALIBRATION
