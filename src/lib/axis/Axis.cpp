@@ -455,6 +455,10 @@ void Axis::poll() {
             homeDetectPosition = getInstrumentCoordinateSteps();
             homingStage = HOME_RETREAT;
             autoRate = AR_RATE_BY_TIME_REVERSE;  // Explicitly set direction for retreat
+            // Adjust speed for retreat
+            slewFreq /= 6.0F;
+            if (slewFreq < 0.0003F) slewFreq = 0.0003F;
+            V(axisPrefix); VLF("home detected, starting retreat at slower speed");
             break;
           case HOME_APPROACH:
             motor->enable(false);
@@ -470,6 +474,10 @@ void Axis::poll() {
         if (abs(getInstrumentCoordinateSteps() - homeDetectPosition) >= (HOME_RETREAT_DISTANCE * settings.stepsPerMeasure)) {
           homingStage = HOME_APPROACH;
           autoRate = AR_RATE_BY_TIME_FORWARD;  // Explicitly set direction for approach
+          // Further reduce speed for final approach
+          slewFreq /= 6.0F;
+          if (slewFreq < 0.0003F) slewFreq = 0.0003F;
+          V(axisPrefix); VLF("retreat complete, starting approach at slowest speed");
         }
       }
     } else {
