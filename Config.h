@@ -240,6 +240,9 @@
 
 #define DOME_SHUTTER_LOCK             OFF //    OFF, ON to disable dome motion unless shutter is open.                        Option
 
+#define HOME_SEQUENCE_MOMENTARY       OFF //    ON to enable consistent final approach sequence
+#define HOME_RETREAT_DISTANCE         3.0 //    Distance to retreat in degrees/microns before final approach
+
 // Usually this will be a GENERIC stepper driver or a servo SERVO_PE (Phase/Enable) or SERVO_EE (Enable/Enable)
 #define AXIS1_DRIVER_MODEL            OFF //    OFF, Enter driver model (above) to activate the dome Azimuth axis.            Option
 #define AXIS1_DRIVER_MICROSTEPS       OFF //    OFF, n. Microstep mode when tracking.                                         Option

@@ -357,7 +357,10 @@ CommandError Axis::autoSlewHome(unsigned long timeout) {
 
   if (pins->axisSense.homeTrigger != OFF) {
     motor->setSynchronized(true);
-    if (homingStage == HOME_NONE) homingStage = HOME_FAST;
+    if (homingStage == HOME_NONE) {
+        homingStage = HOME_FAST; 
+        lastSensorState = sense.isOn(homeSenseHandle);  // Initialize state when homing starts
+    }
     if (autoRate == AR_NONE) {
       motor->setSlewing(true);
       V(axisPrefix); VF("autoSlewHome ");
@@ -365,15 +368,29 @@ CommandError Axis::autoSlewHome(unsigned long timeout) {
         case HOME_FAST: VF("fast "); break;
         case HOME_SLOW: VF("slow "); break;
         case HOME_FINE: VF("fine "); break;
+        case HOME_RETREAT: VF("retreat "); break;
+        case HOME_APPROACH: VF("approach "); break;
         default: break;
       }
     }
-    if (sense.isOn(homeSenseHandle)) {
-      VF("fwd@ ");
-      autoRate = AR_RATE_BY_TIME_FORWARD;
-    } else {
-      VF("rev@ ");
-      autoRate = AR_RATE_BY_TIME_REVERSE;
+    switch (homingStage) {
+      case HOME_RETREAT:                              // [NEW]
+        VF("rev@ ");
+        autoRate = AR_RATE_BY_TIME_REVERSE;
+        break;
+      case HOME_APPROACH:                             // [NEW]
+        VF("fwd@ ");
+        autoRate = AR_RATE_BY_TIME_FORWARD;
+        break;
+      default:
+        if (sense.isOn(homeSenseHandle)) {
+          VF("fwd@ ");
+          autoRate = AR_RATE_BY_TIME_FORWARD;
+        } else {
+          VF("rev@ ");
+          autoRate = AR_RATE_BY_TIME_REVERSE;
+        }
+        break;
     }
 
     // automatically set timeout if not specified
@@ -443,8 +460,27 @@ void Axis::poll() {
 
   // stop homing as we pass by the switch or times out
   if (homingStage != HOME_NONE && (autoRate == AR_RATE_BY_TIME_FORWARD || autoRate == AR_RATE_BY_TIME_REVERSE)) {
-    if (autoRate == AR_RATE_BY_TIME_FORWARD && !sense.isOn(homeSenseHandle)) autoSlewStop();
-    if (autoRate == AR_RATE_BY_TIME_REVERSE && sense.isOn(homeSenseHandle)) autoSlewStop();
+    if (HOME_SEQUENCE_MOMENTARY == ON) {
+      if (lastSensorState != sense.isOn(homeSenseHandle)) {
+        switch (homingStage) {
+          case HOME_FAST:
+            homeDetectPosition = getInstrumentCoordinateSteps();
+            homingStage = HOME_RETREAT;
+          case HOME_RETREAT:
+            if (abs(getInstrumentCoordinateSteps() - homeDetectPosition) >= (HOME_RETREAT_DISTANCE * settings.stepsPerMeasure)) {
+              homingStage = HOME_APPROACH;
+            }
+          case HOME_APPROACH:
+            motor->enable(false);
+            resetPositionSteps(0);
+            homingStage = HOME_NONE;
+        }
+        lastSensorState = !lastSensorState;
+      }
+    } else {
+      if (autoRate == AR_RATE_BY_TIME_FORWARD && !sense.isOn(homeSenseHandle)) autoSlewStop();
+      if (autoRate == AR_RATE_BY_TIME_REVERSE && sense.isOn(homeSenseHandle)) autoSlewStop();
+    }
     if ((long)(millis() - homeTimeoutTime) > 0) {
       V(axisPrefix); VLF("autoSlewHome timed out");
       autoSlewAbort();
