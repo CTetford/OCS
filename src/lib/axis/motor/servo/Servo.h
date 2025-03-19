@@ -120,9 +120,6 @@ class ServoMotor : public Motor {
 
     // get encoder count
     int32_t getEncoderCount() { return encoder->count; }
-
-    // get measured encoder velocity in counts per second
-    float getEncoderVelocity() { return currentVelocity; }
     
     // updates PID and sets servo motor power/direction
     void poll();
