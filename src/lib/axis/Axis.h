@@ -99,7 +99,7 @@ typedef struct AxisErrors {
 } AxisErrors;
 
 enum AutoRate: uint8_t {AR_NONE, AR_RATE_BY_TIME_ABORT, AR_RATE_BY_TIME_END, AR_RATE_BY_DISTANCE, AR_RATE_BY_TIME_FORWARD, AR_RATE_BY_TIME_REVERSE};
-enum HomingStage: uint8_t {HOME_NONE, HOME_FINE, HOME_SLOW, HOME_FAST};
+enum HomingStage: uint8_t {HOME_NONE, HOME_FINE, HOME_SLOW, HOME_FAST, HOME_RETREAT, HOME_APPROACH};
 enum AxisMeasure: uint8_t {AXIS_MEASURE_UNKNOWN, AXIS_MEASURE_MICRONS, AXIS_MEASURE_DEGREES, AXIS_MEASURE_RADIANS};
 
 class Axis {
@@ -431,6 +431,8 @@ class Axis {
 
     // timeout for home switch detection
     unsigned long homeTimeoutTime = 0;   // in milliseconds
+    long homeDetectPosition = 0;         // Position where home was detected
+    bool lastSensorState = false;        // Last state of home sensor during homing
 
     // rates (in measures per second) to control motor movement
     float freq = 0.0F;                   // momentary frequency in measures/s
