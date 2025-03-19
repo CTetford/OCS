@@ -452,6 +452,7 @@ void Axis::poll() {
       if (lastSensorState != sense.isOn(homeSenseHandle)) {
         switch (homingStage) {
           case HOME_FAST:
+            homeDetectPosition = getInstrumentCoordinateSteps();
             homingStage = HOME_RETREAT;
             autoRate = AR_RATE_BY_TIME_REVERSE;  // Explicitly set direction for retreat
             V(axisPrefix); VLF("home detected, starting retreat");
