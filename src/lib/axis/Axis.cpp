@@ -373,24 +373,12 @@ CommandError Axis::autoSlewHome(unsigned long timeout) {
         default: break;
       }
     }
-    switch (homingStage) {
-      case HOME_RETREAT:                              // [NEW]
-        VF("rev@ ");
-        autoRate = AR_RATE_BY_TIME_REVERSE;
-        break;
-      case HOME_APPROACH:                             // [NEW]
-        VF("fwd@ ");
-        autoRate = AR_RATE_BY_TIME_FORWARD;
-        break;
-      default:
-        if (sense.isOn(homeSenseHandle)) {
-          VF("fwd@ ");
-          autoRate = AR_RATE_BY_TIME_FORWARD;
-        } else {
-          VF("rev@ ");
-          autoRate = AR_RATE_BY_TIME_REVERSE;
-        }
-        break;
+    if (sense.isOn(homeSenseHandle)) {
+      VF("fwd@ ");
+      autoRate = AR_RATE_BY_TIME_FORWARD;
+    } else {
+      VF("rev@ ");
+      autoRate = AR_RATE_BY_TIME_REVERSE;
     }
 
     // automatically set timeout if not specified
@@ -466,14 +454,19 @@ void Axis::poll() {
           case HOME_FAST:
             homeDetectPosition = getInstrumentCoordinateSteps();
             homingStage = HOME_RETREAT;
+            autoRate = AR_RATE_BY_TIME_REVERSE;  // Explicitly set direction for retreat
+            break;
           case HOME_RETREAT:
             if (abs(getInstrumentCoordinateSteps() - homeDetectPosition) >= (HOME_RETREAT_DISTANCE * settings.stepsPerMeasure)) {
               homingStage = HOME_APPROACH;
+              autoRate = AR_RATE_BY_TIME_FORWARD;  // Explicitly set direction for approach
             }
+            break;
           case HOME_APPROACH:
             motor->enable(false);
             resetPositionSteps(0);
             homingStage = HOME_NONE;
+            break;
         }
         lastSensorState = !lastSensorState;
       }
