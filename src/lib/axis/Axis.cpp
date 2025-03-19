@@ -446,21 +446,15 @@ void Axis::poll() {
   errors.maxLimitSensed = sense.isOn(maxSenseHandle);
   bool commonMinMaxSensed = commonMinMaxSense && (errors.minLimitSensed || errors.maxLimitSensed);
 
-  // stop homing as we pass by the switch or times out
   if (homingStage != HOME_NONE && (autoRate == AR_RATE_BY_TIME_FORWARD || autoRate == AR_RATE_BY_TIME_REVERSE)) {
     if (HOME_SEQUENCE_MOMENTARY == ON) {
+      // check if limit switch changes
       if (lastSensorState != sense.isOn(homeSenseHandle)) {
         switch (homingStage) {
           case HOME_FAST:
             homeDetectPosition = getInstrumentCoordinateSteps();
             homingStage = HOME_RETREAT;
             autoRate = AR_RATE_BY_TIME_REVERSE;  // Explicitly set direction for retreat
-            break;
-          case HOME_RETREAT:
-            if (abs(getInstrumentCoordinateSteps() - homeDetectPosition) >= (HOME_RETREAT_DISTANCE * settings.stepsPerMeasure)) {
-              homingStage = HOME_APPROACH;
-              autoRate = AR_RATE_BY_TIME_FORWARD;  // Explicitly set direction for approach
-            }
             break;
           case HOME_APPROACH:
             motor->enable(false);
@@ -470,7 +464,16 @@ void Axis::poll() {
         }
         lastSensorState = !lastSensorState;
       }
+
+      // special case for HOME_RETREAT - check on every poll cycle
+      if (homingStage == HOME_RETREAT) {
+        if (abs(getInstrumentCoordinateSteps() - homeDetectPosition) >= (HOME_RETREAT_DISTANCE * settings.stepsPerMeasure)) {
+          homingStage = HOME_APPROACH;
+          autoRate = AR_RATE_BY_TIME_FORWARD;  // Explicitly set direction for approach
+        }
+      }
     } else {
+      // stop homing as we pass by the switch or times out
       if (autoRate == AR_RATE_BY_TIME_FORWARD && !sense.isOn(homeSenseHandle)) autoSlewStop();
       if (autoRate == AR_RATE_BY_TIME_REVERSE && sense.isOn(homeSenseHandle)) autoSlewStop();
     }
