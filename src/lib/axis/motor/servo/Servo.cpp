@@ -304,9 +304,16 @@ void ServoMotor::poll() {
   #if SERVO_DEADBAND_ENABLED == ON
     // If not slewing and encoderCounts is within deadband tolerance of motorCounts, disable the motor
     if (!slewing && 
-        fabs(velocity) < VELOCITY_MIN &&
         labs(motorCounts - encoderCounts) <= SERVO_DEADBAND_TOLERANCE * stepsPerMeasure) {
-      enable(false);
+      if (fabs(velocity) < VELOCITY_MIN || 
+          labs(motorCounts - encoderCounts) < (SERVO_DEADBAND_TOLERANCE * stepsPerMeasure / 2)) {
+        if (enabled) {
+          V(axisPrefix); VF("disabling motor, servo in deadband, delta="); 
+          V(labs(motorCounts - encoderCounts)/stepsPerMeasure); 
+          VF(" degrees, velocity="); V(velocity); VLF("%");
+          enable(false);
+        }
+      }
     }
   #endif
   if (!enabled) velocity = 0.0F;
