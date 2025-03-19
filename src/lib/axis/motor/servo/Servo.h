@@ -26,6 +26,18 @@
   #define SERVO_SAFETY_STALL_POWER 33 // in percent
 #endif
 
+#ifndef SERVO_DEADBAND_ENABLED
+  #define SERVO_DEADBAND_ENABLED              OFF    // OFF or ON enables power down when velocity < min and within position deadband 
+#endif
+
+#ifndef SERVO_DEADBAND_TOLERANCE
+  #define SERVO_DEADBAND_TOLERANCE            0.5F   // deadband tolerance in degrees, within this position power is removed
+#endif
+
+#ifndef SERVO_DEADBAND_VELOCITY_THRESHOLD
+  #define SERVO_DEADBAND_VELOCITY_THRESHOLD   10.0F  // deadband cutoff velocity in encoder counts per second
+#endif
+
 #ifdef ABSOLUTE_ENCODER_CALIBRATION
   #ifndef ENCODER_ECM_BUFFER_SIZE
     #define ENCODER_ECM_BUFFER_SIZE 16384
@@ -109,6 +121,9 @@ class ServoMotor : public Motor {
     // get encoder count
     int32_t getEncoderCount() { return encoder->count; }
 
+    // get measured encoder velocity in counts per second
+    float getEncoderVelocity() { return currentVelocity; }
+    
     // updates PID and sets servo motor power/direction
     void poll();
 
@@ -185,6 +200,10 @@ class ServoMotor : public Motor {
     unsigned long lastPeriod = 0;       // last timer period (in sub-micros)
     long syncThreshold = OFF;           // sync threshold in counts (for absolute encoders) or OFF
 
+    long lastEncoderCountsVelocity = 0; // previous encoder count for velocity calculation
+    unsigned long lastVelocityCheckTime = 0;
+    float currentVelocity = 0.0F;       // encoder counts per second
+    
     long lastEncoderCounts = 0;         // the last encoder position for stall check
     unsigned long lastCheckTime = 0;    // time since the last encoder position was checked
     unsigned long startTime = 0;        // time at start of servo polling

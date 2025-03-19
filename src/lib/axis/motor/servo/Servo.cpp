@@ -270,6 +270,15 @@ void ServoMotor::setSlewing(bool state) {
 void ServoMotor::poll() {
   long encoderCounts = encoderRead();
 
+  // Calculate velocity every 50ms
+  unsigned long currentTime = millis();
+  unsigned long intervalMs = currentTime - lastVelocityCheckTime;
+  if (intervalMs >= 50) { // 50ms for 20Hz velocity updates
+    currentVelocity = ((float)(encoderCounts - lastEncoderCountsVelocity) / intervalMs) * 1000.0F;
+    lastEncoderCountsVelocity = encoderCounts;
+    lastVelocityCheckTime = currentTime;
+  }
+
   long encoderCountsOrig = encoderCounts;
 
   // for absolute encoders initialize the motor position at startup
@@ -302,18 +311,11 @@ void ServoMotor::poll() {
 
   float velocity = velocityEstimate + control->out;
   #if SERVO_DEADBAND_ENABLED == ON
-    // If not slewing and encoderCounts is within deadband tolerance of motorCounts, disable the motor
+    // If not slewing and within deadband tolerance with minimal actual movement, disable the motor
     if (!slewing && 
-        labs(motorCounts - encoderCounts) <= SERVO_DEADBAND_TOLERANCE * stepsPerMeasure) {
-      if (fabs(velocity) < VELOCITY_MIN || 
-          labs(motorCounts - encoderCounts) < (SERVO_DEADBAND_TOLERANCE * stepsPerMeasure / 2)) {
-        if (enabled) {
-          V(axisPrefix); VF("disabling motor, servo in deadband, delta="); 
-          V(labs(motorCounts - encoderCounts)/stepsPerMeasure); 
-          VF(" degrees, velocity="); V(velocity); VLF("%");
-          enable(false);
-        }
-      }
+        labs(motorCounts - encoderCounts) <= SERVO_DEADBAND_TOLERANCE * stepsPerMeasure &&
+        fabs(currentVelocity) < SERVO_DEADBAND_VELOCITY_THRESHOLD) {
+      enable(false);
     }
   #endif
   if (!enabled) velocity = 0.0F;
@@ -342,9 +344,9 @@ void ServoMotor::poll() {
 
   if (feedback->autoScaleParameters) {
     if (!slewing && enabled) {
-      if ((long)(millis() - lastSlewingTime) > SERVO_SLEWING_TO_TRACKING_DELAY) feedback->selectTrackingParameters(); else feedback->selectSlewingParameters();
+      if ((long)(currentTime - lastSlewingTime) > SERVO_SLEWING_TO_TRACKING_DELAY) feedback->selectTrackingParameters(); else feedback->selectSlewingParameters();
     } else {
-      lastSlewingTime = millis();
+      lastSlewingTime = currentTime;
       feedback->selectSlewingParameters();
     } 
   } else {
@@ -354,7 +356,7 @@ void ServoMotor::poll() {
   if (velocityPercent < -33) wasBelow33 = true;
   if (velocityPercent > 33) wasAbove33 = true;
 
-  if (millis() - lastCheckTime > 2000) {
+  if (currentTime - lastCheckTime > 2000) {
 
     #ifndef SERVO_SAFETY_DISABLE
       // if above SERVO_SAFETY_STALL_POWER (33% default) and we're not moving something is seriously wrong, so shut it down
@@ -387,7 +389,7 @@ void ServoMotor::poll() {
     wasAbove33 = false;
     wasBelow33 = false;
     lastEncoderCounts = encoderCounts;
-    lastCheckTime = millis();
+    lastCheckTime = currentTime;
   }
 
   #if DEBUG != OFF && defined(DEBUG_SERVO) && DEBUG_SERVO != OFF
