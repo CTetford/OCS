@@ -359,7 +359,7 @@ CommandError Axis::autoSlewHome(unsigned long timeout) {
     motor->setSynchronized(true);
     if (homingStage == HOME_NONE) {
         homingStage = HOME_FAST; 
-        lastSensorState = sense.isOn(homeSenseHandle);  // Initialize state when homing starts
+        lastSensorState = sense.isOn(1);  // Initialize state when homing starts
     }
     if (autoRate == AR_NONE) {
       motor->setSlewing(true);
@@ -373,7 +373,7 @@ CommandError Axis::autoSlewHome(unsigned long timeout) {
         default: break;
       }
     }
-    if (sense.isOn(homeSenseHandle)) {
+    if (sense.isOn(1)) {
       VF("fwd@ ");
       autoRate = AR_RATE_BY_TIME_FORWARD;
     } else {
@@ -427,9 +427,9 @@ void Axis::poll() {
 
   // let the user know if the associated senses change state
   #if DEBUG == VERBOSE
-    if (sense.changed(homeSenseHandle)) {
+    if (sense.changed(1)) {
       V(axisPrefix); VF("home sense state changed ");
-      if (sense.isOn(homeSenseHandle)) { VLF("ON"); } else { VLF("OFF"); }
+      if (sense.isOn(1)) { VLF("ON"); } else { VLF("OFF"); }
     }
     if (sense.changed(minSenseHandle)) {
       V(axisPrefix); VF("min sense state changed ");
@@ -448,14 +448,18 @@ void Axis::poll() {
 
   if (homingStage != HOME_NONE && (autoRate == AR_RATE_BY_TIME_FORWARD || autoRate == AR_RATE_BY_TIME_REVERSE)) {
     if (HOME_SEQUENCE_MOMENTARY == ON) {
+      static bool lastSensorState = false;
+      static long homeDetectPosition = 0; // Position where home is detected
+
       // check if limit switch changes
-      if (lastSensorState != sense.isOn(homeSenseHandle)) {
+      if (lastSensorState != sense.isOn(1)) {
         switch (homingStage) {
           case HOME_FAST:
             homeDetectPosition = getInstrumentCoordinateSteps();
             homingStage = HOME_RETREAT;
             autoRate = AR_RATE_BY_TIME_REVERSE;  // Explicitly set direction for retreat
             V(axisPrefix); VLF("home detected, starting retreat");
+            homeTimeoutTime = millis() + (HOME_RETREAT_DISTANCE/slewFreq)*4.0F*1000.0F; // Reset timeout for retreat+approach;
             break;
           case HOME_APPROACH:
             motor->enable(false);

@@ -431,8 +431,6 @@ class Axis {
 
     // timeout for home switch detection
     unsigned long homeTimeoutTime = 0;   // in milliseconds
-    long homeDetectPosition = 0;         // Position where home was detected
-    bool lastSensorState = false;        // Last state of home sensor during homing
 
     // rates (in measures per second) to control motor movement
     float freq = 0.0F;                   // momentary frequency in measures/s
