@@ -45,8 +45,8 @@
 #define CONNECT_FAIL_WATCHDOG         OFF //    OFF, ON to stop all processing and trigger the watchdog reset.                Option
 
 // TIME SETTINGS -------------------------------------------------------------------------------------------------------------------
-#define TIME_LOCATION_SOURCE          NTP //    NTP, Network Time Protocol w/IP address settings below, or DS3231 on I2C,     Adjust
-                                          //         or DS3234 on default SPI interface and default CS pin.
+#define TIME_LOCATION_SOURCE          NTP //    NTP, Network Time Protocol w/IP address settings below, or DS3231 (I2C),      Adjust
+                                          //         SD3031 (I2C), DS3234 (SPI), TEENSY.
 #define TIME_IP_ADDR        {129,6,15,28} // ...6,15,28}, time-a-g.nist.gov at 129,6,15,28 or 129,6,15,29, 129,6,15,30, etc.  Option
 #define TIME_ZONE                      -5 //     -5, Time Zone (US Eastern Standard Time in this case.)                      <-Req'd
 #define TIME_DISPLAY                  STD //    STD, Display Standard Time, UT1 to display Universal Time.                    Adjust
@@ -105,12 +105,19 @@
 
 // LIGHTING PANEL ------------------------------------------------------------------------------------------------------------------
 #define LIGHT                         OFF //    OFF, ON to enable the OCS website lighting panel display.                     Option
+
 #define LIGHT_WRW_RELAY               OFF //    OFF, n. Where n=1..18 (Relay#) for Warm room white lights.                    Option
 #define LIGHT_WRR_RELAY               OFF //    OFF, n. Where n=1..18 (Relay#) for Warm room red lights.                      Option
 #define LIGHT_ORW_RELAY               OFF //    OFF, n. Where n=1..18 (Relay#) for Observing room white lights.               Option
 #define LIGHT_ORR_RELAY               OFF //    OFF, n. Where n=1..18 (Relay#) for Observing room red lights.                 Option
 #define LIGHT_OUTSIDE_RELAY           OFF //    OFF, n. Where n=1..18 (Relay#) for Outside flood.                             Option
-#define LIGHT_SW_SENSE                OFF //    OFF, n. Where n=1..8 (Sense#) for switch to turn WRW lights on/off.           Option
+
+#define LIGHT_STRIP_DATA_PIN          OFF //    OFF, n. GPIO pin to LED controller chips (default WS2811GRB)                  Option
+#define LIGHT_STRIP_COUNT              16 //     16, n. Where n=1..1000 LED controller chip count                             Option
+#define LIGHT_STRIP_WR_RANGE        {0,7} //  {0,7}, n,n. Where n=0..LIGHT_STRIP_COUNT-1 ID range for Warm room               Option
+#define LIGHT_STRIP_OR_RANGE       {8,15} // {8,15}, n,n. Where n=0..LIGHT_STRIP_COUNT-1 LED ID for Observing room            Option
+
+#define LIGHT_SW_SENSE                OFF //    OFF, n. Where n=1..8 (Sense#) for switch to turn warm room lights on/off.     Option
 
 // WEATHER PANEL -------------------------------------------------------------------------------------------------------------------
 // Weather and Sky Conditions web page charts use "Chart.js" http://www.chartjs.org/. Specifically, version 2.5 of "Chart.min.js"
