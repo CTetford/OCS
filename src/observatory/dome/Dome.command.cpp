@@ -5,6 +5,8 @@
 
 #ifdef DOME_PRESENT
 
+#include "../roof/Roof.h"
+
 bool Dome::command(char reply[], char command[], char parameter[], bool *supressFrame, bool *numericReply, CommandError *commandError) {
 
 	if (command[0] == 'D') {
@@ -140,8 +142,29 @@ bool Dome::command(char reply[], char command[], char parameter[], bool *supress
       reply[1] = 0;
       *numericReply = false;
     } else *commandError = CE_CMD_UNKNOWN;
-	} else
-  	return false;
+	} else {
+
+    #ifdef SERVO_PID_AUTOTUNE_PRESENT
+      // dome-level safety gate for the PID auto-tune start form (:SXT[n],1...#) only;
+      // the auto-tune drives axis autoGoto() below the checks a normal :DS# performs,
+      // so parked state and the shutter-lock interlock must be enforced here.
+      // abort (:SXT[n],0#,) apply (:SXT[n],2#) and status (:GXT[n]#) always pass through
+      if (command[0] == 'S' && command[1] == 'X' && parameter[0] == 'T' &&
+          parameter[2] == ',' && parameter[3] == '1') {
+        #if defined(ROOF_PRESENT) && DOME_SHUTTER_LOCK == ON
+          if (!roof.open()) { *commandError = CE_SLEW_ERR_IN_STANDBY; return true; }
+        #endif
+        if (settings.park.state >= PS_PARKED) { *commandError = CE_SLEW_ERR_IN_PARK; return true; }
+      }
+    #endif
+
+    // give the axes a shot at otherwise unhandled commands (:GXA/:SXA/:GXS/:GXU/:SXT/:GXT)
+    if (axis1.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    #if AXIS2_DRIVER_MODEL != OFF
+      if (axis2.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    #endif
+    return false;
+  }
 
   return true;
 }

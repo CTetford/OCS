@@ -24,6 +24,9 @@
 #ifndef PID_DMODE
   #define PID_DMODE dOnMeas
 #endif
+#ifndef PID_MAX_GAIN
+  #define PID_MAX_GAIN 10000.0F // upper bound accepted by validateParameters()
+#endif
 
 class Pid : public Feedback {
   public:
@@ -37,6 +40,9 @@ class Pid : public Feedback {
 
     // get driver type code so clients understand the use of the six parameters
     char getParameterTypeCode() { return 'P'; }
+
+    // validate PID parameters (rejects NaN, negative, and absurdly large gains)
+    bool validateParameters(float param1, float param2, float param3, float param4, float param5, float param6);
 
     // set feedback control direction
     void setControlDirection(int8_t state);

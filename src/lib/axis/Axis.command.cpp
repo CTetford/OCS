@@ -27,14 +27,14 @@ bool Axis::command(char *reply, char *command, char *parameter, bool *supressFra
         if (!(axesToRevert & (1 << axisNumber))) {
           AxisStoredSettings thisAxis;
           nv.readBytes(NV_AXIS_SETTINGS_BASE + index*AxisStoredSettingsSize, &thisAxis, sizeof(AxisStoredSettings));
-          if (axisNumber <= 2) {
-            // convert axis1 and axis2 into degrees
+          if (unitsRadians) {
+            // convert radian axes into degrees
             thisAxis.stepsPerMeasure /= RAD_DEG_RATIO;
             thisAxis.limits.min = radToDegF(thisAxis.limits.min);
             thisAxis.limits.max = radToDegF(thisAxis.limits.max);
           } else
-          if (axisNumber > 3) {
-            // convert axis > 3 min/max into mm
+          if (unitsStr[0] == 'u') {
+            // convert micron axes min/max into mm
             thisAxis.limits.min = thisAxis.limits.min/1000.0F;
             thisAxis.limits.max = thisAxis.limits.max/1000.0F;
           }
@@ -69,6 +69,36 @@ bool Axis::command(char *reply, char *command, char *parameter, bool *supressFra
         char temp[20];
         sprintF(temp, "%0.3f", ((ServoMotor*)motor)->velocityPercent);
         sprintf(reply, "%ld,%s", ((ServoMotor*)motor)->delta, temp);
+        *numericReply = false;
+      } else
+    #endif
+
+    #ifdef SERVO_PID_AUTOTUNE_PRESENT
+      // :GXT[n]#   Get axis PID auto-tune status
+      //            Returns: state,iteration,repeat,result,Kp,Ki,Kd,overshootCounts,settleMs,converged,maxRate,saturated
+      //            state: 0=idle 1=speed-test 2=preload 3=move 4=monitor 5=aggregate 6=analyze 7=done 8=failed
+      //            result: 0=none 1=converged 2=best-effort 3=aborted 4=timeout 5=fault 6=safety-shutdown 7=motion-error
+      //            maxRate: measured physical maximum rotation rate in deg/s (0 if not measured)
+      //            saturated: 1 if the drive output saturated during the speed test (maxRate is
+      //            the true physical ceiling;) 0 means the true maximum is above maxRate
+      if (parameter[0] == 'T') {
+        int index = parameter[1] - '1';
+        if (index > 8) { *commandError = CE_PARAM_RANGE; return true; }
+        if (index + 1 != axisNumber) return false; // command wasn't processed
+        if (motor->driverType != SERVO) { *commandError = CE_CMD_UNKNOWN; return true; } // not a servo
+
+        const float *gains = autoTuneStagedValid ? autoTuneStaged : autoTuneCandidate;
+        char kp[20], ki[20], kd[20], os[20], st[20], mr[20];
+        sprintF(kp, "%0.3f", gains[0]);
+        sprintF(ki, "%0.3f", gains[1]);
+        sprintF(kd, "%0.3f", gains[2]);
+        sprintF(os, "%0.1f", autoTuneOvershootResult);
+        sprintF(st, "%0.0f", autoTuneSettleTimeResult);
+        sprintF(mr, "%0.3f", autoTuneMeasuredMaxRate);
+        sprintf(reply, "%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s,%d",
+          (int)autoTuneState, (int)autoTuneIteration, (int)autoTuneRepeat, (int)autoTuneResult,
+          kp, ki, kd, os, st, (int)(autoTuneResult == ATR_CONVERGED),
+          mr, (int)autoTuneSpeedSaturated);
         *numericReply = false;
       } else
     #endif
@@ -113,27 +143,57 @@ bool Axis::command(char *reply, char *command, char *parameter, bool *supressFra
           // :SXA[n],[sssss...]#
           AxisStoredSettings thisAxis = settings;
           if (decodeAxisSettings(&parameter[3], thisAxis)) {
-            // convert axis1, 2 into radians
-            if (axisNumber <= 2) {
+            // convert radian axes into radians
+            if (unitsRadians) {
               thisAxis.stepsPerMeasure *= RAD_DEG_RATIO;
               thisAxis.limits.min = degToRadF(thisAxis.limits.min);
               thisAxis.limits.max = degToRadF(thisAxis.limits.max);
             } else
-            // convert axis > 3 min/max into microns
-            if (axisNumber > 3) {
+            // convert micron axes min/max into microns
+            if (unitsStr[0] == 'u') {
               thisAxis.limits.min = thisAxis.limits.min*1000.0F;
               thisAxis.limits.max = thisAxis.limits.max*1000.0F;
             }
             // save the settings to NV, and update axis immediately if supported
             if (validateAxisSettings(axisNumber, thisAxis)) {
               nv.updateBytes(NV_AXIS_SETTINGS_BASE + (axisNumber - 1)*AxisStoredSettingsSize, &thisAxis, sizeof(AxisStoredSettings));
+              settings = thisAxis; // keep the RAM copy consistent with NV
               if (motor->driverType == SERVO) motor->setParameters(thisAxis.param1, thisAxis.param2, thisAxis.param3, thisAxis.param4, thisAxis.param5, thisAxis.param6);
             } else *commandError = CE_PARAM_FORM;
           } else *commandError = CE_PARAM_FORM;
         }
       } else *commandError = CE_0;
     } else *commandError = CE_0;
-  } else return false;
+  } else
+
+  #ifdef SERVO_PID_AUTOTUNE_PRESENT
+  // :SXT[n],[v]#  PID auto-tune control for axis [n]
+  //               :SXT[n],1#        start with the config default test distance
+  //               :SXT[n],1,[D.D]#  start with a test distance override (in degrees)
+  //               :SXT[n],0#        abort, restoring the pre-tune gains
+  //               :SXT[n],2#        apply and persist the staged result
+  //               Returns: 0 on failure, 1 on success
+  if (command[0] == 'S' && command[1] == 'X' && parameter[0] == 'T' && parameter[2] == ',') {
+    int index = parameter[1] - '1';
+    if (index > 8) { *commandError = CE_PARAM_RANGE; return true; }
+    if (index + 1 != axisNumber) return false; // command wasn't processed
+    if (motor->driverType != SERVO) { *commandError = CE_CMD_UNKNOWN; return true; } // not a servo
+
+    if (parameter[3] == '1' && (parameter[4] == 0 || parameter[4] == ',')) {
+      float distance = NAN;
+      if (parameter[4] == ',') distance = atof(&parameter[5]);
+      *commandError = autoTuneStart(distance);
+    } else
+    if (parameter[3] == '0' && parameter[4] == 0) {
+      autoTuneAbort();
+    } else
+    if (parameter[3] == '2' && parameter[4] == 0) {
+      *commandError = autoTuneApply();
+    } else *commandError = CE_PARAM_FORM;
+  } else
+  #endif
+
+  return false;
 
   return true;
 }

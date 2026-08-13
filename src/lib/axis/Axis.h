@@ -103,6 +103,13 @@ enum AutoRate: uint8_t {AR_NONE, AR_RATE_BY_TIME_ABORT, AR_RATE_BY_TIME_END, AR_
 enum HomingStage: uint8_t {HOME_NONE, HOME_FINE, HOME_SLOW, HOME_FAST};
 enum AxisMeasure: uint8_t {AXIS_MEASURE_UNKNOWN, AXIS_MEASURE_MICRONS, AXIS_MEASURE_DEGREES, AXIS_MEASURE_RADIANS};
 
+#ifdef SERVO_PID_AUTOTUNE_PRESENT
+// PID auto-tune state machine states
+enum AutoTuneState: uint8_t {AT_IDLE, AT_SPEED, AT_PRELOAD, AT_MOVE, AT_MONITOR, AT_AGGREGATE, AT_ANALYZE, AT_DONE_SUCCESS, AT_DONE_FAIL};
+// PID auto-tune result/refusal codes (reported by :GXT)
+enum AutoTuneResult: uint8_t {ATR_NONE, ATR_CONVERGED, ATR_BEST_EFFORT, ATR_ABORTED, ATR_TIMEOUT, ATR_FAULT, ATR_SAFETY_SHUTDOWN, ATR_MOTION_ERROR};
+#endif
+
 class Axis {
   public:
     // constructor for this motion controller
@@ -352,6 +359,21 @@ class Axis {
     // \param direction: one of DIR_FORWARD, DIR_REVERSE, or DIR_BOTH
     bool motionErrorSensed(Direction direction);
 
+    #ifdef SERVO_PID_AUTOTUNE_PRESENT
+      // start the PID auto-tune of the slewing gain set (param4-6)
+      // \param testDistance: measured move distance in "measures" (degrees,) or NAN for the config default
+      CommandError autoTuneStart(float testDistance);
+
+      // abort a running PID auto-tune, restoring the pre-tune gains
+      void autoTuneAbort();
+
+      // apply the staged auto-tune result live and persist it to NV
+      CommandError autoTuneApply();
+
+      // true while an auto-tune run is active
+      inline bool autoTuneActive() { return autoTuneState != AT_IDLE && autoTuneState != AT_DONE_SUCCESS && autoTuneState != AT_DONE_FAIL; }
+    #endif
+
     // calibrate the associated motor
     void calibrate(float value) { motor->calibrate(value); }
 
@@ -395,6 +417,86 @@ class Axis {
     bool decodeAxisSettings(char *s, AxisStoredSettings &a);
 
     bool validateAxisSettings(int axisNum, AxisStoredSettings a);
+
+    #ifdef SERVO_PID_AUTOTUNE_PRESENT
+      // advance the auto-tune state machine (called from poll() while active)
+      void autoTunePoll();
+
+      // apply the candidate gains: setParameters() then an enable toggle so
+      // Pid::reset() reloads param4-6 into SetTunings() and clears windup
+      void autoTuneSetCandidate();
+
+      // end the run: stop motion, release the slewing-set hold, restore pre-tune gains
+      void autoTuneFinish(AutoTuneResult result);
+
+      // handle a servo safety shutdown or driver fault; returns true if one occurred
+      bool autoTuneSafetyEvent();
+
+      // robust aggregate of a round's samples (median + modified Z-score outlier filter)
+      float autoTuneAggregate(float values[], int count);
+
+      AutoTuneState autoTuneState = AT_IDLE;
+      AutoTuneResult autoTuneResult = ATR_NONE;
+      uint8_t autoTunePhase = 0;                    // sub-phase within a state
+      uint8_t autoTuneIteration = 0;                // correction rounds completed
+      uint8_t autoTuneRepeat = 0;                   // measured moves completed this round
+      uint8_t autoTuneShutdownCount = 0;            // servo safety shutdowns this run
+      uint8_t autoTuneHuntingCount = 0;             // hunting-flagged repeats this round
+      int8_t autoTuneDirection = 1;                 // direction of the current test move
+      bool autoTuneHoldSlewing = false;             // holding motor->setSlewing(true) during monitor
+      bool autoTuneStagedValid = false;             // autoTuneStaged[] holds a result awaiting :SXT,2
+
+      long autoTuneSettleBandSteps = 2;             // settle band in steps (counts)
+      long autoTuneMaxOvershootSteps = 4;           // overshoot acceptance in steps (counts)
+      float autoTuneTestDistance = 0.0F;            // measured move distance in measures
+      float autoTunePreloadDistance = 0.0F;         // backlash take-up nudge distance in measures
+      float autoTuneRate = NAN;                     // test slew rate in measures/s (NAN = production rate)
+      unsigned long autoTuneMoveTimeout = 0;        // per-move watchdog period in milliseconds
+
+      // physical maximum rotation rate measurement
+      float autoTuneSpeedDistance = 0.0F;           // speed test move distance in measures
+      float autoTuneSpeedRate = 0.0F;               // commanded (over-speed) rate in measures/s
+      float autoTuneMaxFreqStore = 0.0F;            // maxFreq before the speed test ceiling lift
+      float autoTuneSlewFreqStore = 0.0F;           // slewFreq before the speed test
+      bool autoTuneMaxFreqOverride = false;         // ceiling lift active (restore on any exit)
+      bool autoTuneSpeedSaturated = false;          // drive output saturated during the speed test
+      float autoTuneMeasuredMaxRate = 0.0F;         // measured maximum rate in measures/s (deg/s)
+      float autoTunePeakRate = 0.0F;                // peak smoothed rate regardless of saturation
+      float autoTuneVelocityEstimate = 0.0F;        // smoothed velocity estimate in measures/s
+      long autoTuneLastPositionSteps = 0;           // last sampled position for velocity estimation
+      unsigned long autoTuneLastSampleTime = 0;     // last velocity sample time in milliseconds
+
+      // per-repeat measurement working state
+      long autoTunePeakOvershoot = 0;               // peak excursion beyond target in steps
+      long autoTuneStableDistance = 0;              // target distance when stability tracking last reset
+      unsigned long autoTuneMoveStartTime = 0;      // measured move start (backlash excluded) in milliseconds
+      unsigned long autoTuneWatchdogTime = 0;       // watchdog deadline in milliseconds
+      unsigned long autoTuneStableStartTime = 0;    // position stable since, in milliseconds
+      unsigned long autoTuneDwellTime = 0;          // post-move dwell deadline in milliseconds
+      unsigned long autoTuneArriveTime = 0;         // goto completion time in milliseconds (0 = still slewing)
+      bool autoTuneMeasuring = false;               // true once out of backlash take-up
+      bool autoTuneInBand = false;                  // currently within the settle band
+      bool autoTuneEverInBand = false;              // has entered the settle band
+      bool autoTuneHunting = false;                 // this repeat classified as hunting
+      uint8_t autoTuneBandCrossings = 0;            // settle band boundary crossings
+
+      // round sample arrays
+      float autoTuneOvershoot[PID_AUTOTUNE_REPEATS];
+      float autoTuneSettleTime[PID_AUTOTUNE_REPEATS];
+      float autoTuneResidual[PID_AUTOTUNE_REPEATS];
+
+      // round aggregates (also reported by :GXT)
+      float autoTuneOvershootResult = 0.0F;
+      float autoTuneSettleTimeResult = 0.0F;
+      float autoTuneResidualResult = 0.0F;
+
+      // gain sets: original (restore,) candidate (testing,) staged (result,) best (fallback)
+      float autoTuneOriginal[3] = {0, 0, 0};
+      float autoTuneCandidate[3] = {0, 0, 0};
+      float autoTuneStaged[3] = {0, 0, 0};
+      float autoTuneBest[3] = {0, 0, 0};
+      float autoTuneBestScore = 0.0F;
+    #endif
     
     AxisErrors errors;
     bool lastErrorResult = false;

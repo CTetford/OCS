@@ -107,6 +107,10 @@ class ServoMotor : public Motor {
     // set slewing state (hint that we are about to slew or are done slewing)
     void setSlewing(bool state);
 
+    // true if the feedback uses auto scaled parameter selection (pure param4-6 during slews,)
+    // required by the PID auto-tune which measures and corrects that gain set
+    inline bool feedbackAutoScales() { return feedback->autoScaleParameters; }
+
     #ifdef ABSOLUTE_ENCODER_CALIBRATION
       void calibrate(float value);
     #endif

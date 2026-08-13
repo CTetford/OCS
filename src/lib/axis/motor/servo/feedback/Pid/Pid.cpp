@@ -55,6 +55,18 @@ void Pid::reset() {
   lastD = d;
 }
 
+// validate PID parameters (rejects NaN, negative, and absurdly large gains)
+bool Pid::validateParameters(float param1, float param2, float param3, float param4, float param5, float param6) {
+  float parameter[6] = {param1, param2, param3, param4, param5, param6};
+  for (int i = 0; i < 6; i++) {
+    if (isnan(parameter[i]) || parameter[i] < 0.0F || parameter[i] > PID_MAX_GAIN) {
+      DF("ERR:"); D(axisPrefix); DF("validate PID parameter"); D(i + 1); DF("="); D(parameter[i]); DLF(" failed");
+      return false;
+    }
+  }
+  return true;
+}
+
 void Pid::setControlDirection(int8_t state) {
   if (state == ON) pid->SetControllerDirection(QuickPID::Action::reverse); else pid->SetControllerDirection(QuickPID::Action::direct);
 }

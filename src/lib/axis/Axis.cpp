@@ -431,6 +431,10 @@ void Axis::poll() {
   // make sure we're ready
   if (axisNumber == 0) return;
 
+  #ifdef SERVO_PID_AUTOTUNE_PRESENT
+    if (autoTuneActive()) autoTunePoll();
+  #endif
+
   // check physical limit switches
   errors.minLimitSensed = sense.isOn(minSenseHandle);
   errors.maxLimitSensed = sense.isOn(maxSenseHandle);

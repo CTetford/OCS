@@ -720,3 +720,82 @@
 #if defined(STEP_DIR_MOTOR_PRESENT) || defined(SERVO_MOTOR_PRESENT)
   #define MOTOR_PRESENT
 #endif
+
+// axis target tolerance (in degrees) for detecting when slews arrive at their target
+// the 0.0 default requires an exact encoder count match (original behavior); high
+// backlash servo drives should set this to roughly the mechanical lash width so
+// gotos terminate cleanly inside the dead band instead of hunting for an exact count
+#ifndef AXIS1_TARGET_TOLERANCE
+#define AXIS1_TARGET_TOLERANCE         0.0
+#endif
+#ifndef AXIS2_TARGET_TOLERANCE
+#define AXIS2_TARGET_TOLERANCE         0.0
+#endif
+
+// servo PID auto-tune (closed-loop bump-test with iterative correction) ------------
+// opt-in, ON enables the :SXT[n]/:GXT[n] commands and the Axis auto-tune state machine
+#ifndef SERVO_PID_AUTOTUNE
+#define SERVO_PID_AUTOTUNE             OFF
+#endif
+#if defined(SERVO_MOTOR_PRESENT) && SERVO_PID_AUTOTUNE == ON
+  #define SERVO_PID_AUTOTUNE_PRESENT
+
+  #ifndef PID_AUTOTUNE_TEST_DISTANCE
+  #define PID_AUTOTUNE_TEST_DISTANCE            10.0 // measured test move distance in degrees
+  #endif
+  #ifndef PID_AUTOTUNE_VALIDATION_SLEW_RATE
+  #define PID_AUTOTUNE_VALIDATION_SLEW_RATE     AUTO // deg/s, AUTO = the axis production slew rate
+  #endif
+  #ifndef PID_AUTOTUNE_MAX_OVERSHOOT_COUNTS
+  #define PID_AUTOTUNE_MAX_OVERSHOOT_COUNTS     AUTO // acceptance, in encoder counts; AUTO = 2x settle band
+  #endif
+  #ifndef PID_AUTOTUNE_SETTLE_TOLERANCE_COUNTS
+  #define PID_AUTOTUNE_SETTLE_TOLERANCE_COUNTS  AUTO // settle band, in encoder counts; AUTO = max(1.5x backlash, 2)
+  #endif
+  #ifndef PID_AUTOTUNE_SETTLE_CONFIRM_MS
+  #define PID_AUTOTUNE_SETTLE_CONFIRM_MS        1000 // position must hold still this long to count as settled
+  #endif
+  #ifndef PID_AUTOTUNE_MAX_SETTLE_MS
+  #define PID_AUTOTUNE_MAX_SETTLE_MS            2000 // acceptance, time from move start to settled
+  #endif
+  #ifndef PID_AUTOTUNE_MOVE_TIMEOUT_MS
+  #define PID_AUTOTUNE_MOVE_TIMEOUT_MS          AUTO // per-move watchdog; AUTO = 4x expected move time + 8s
+  #endif
+  #ifndef PID_AUTOTUNE_MAX_ITERATIONS
+  #define PID_AUTOTUNE_MAX_ITERATIONS           6    // correction rounds before giving up
+  #endif
+  #ifndef PID_AUTOTUNE_REPEATS
+  #define PID_AUTOTUNE_REPEATS                  5    // measured moves per round
+  #endif
+  #ifndef PID_AUTOTUNE_GAIN_STEP_LIMIT_PERCENT
+  #define PID_AUTOTUNE_GAIN_STEP_LIMIT_PERCENT  40   // max gain change per round in percent
+  #endif
+  #ifndef PID_AUTOTUNE_SAFETY_BACKOFF_PERCENT
+  #define PID_AUTOTUNE_SAFETY_BACKOFF_PERCENT   50   // gain reduction (to this percent) after a servo safety shutdown
+  #endif
+  #ifndef PID_AUTOTUNE_MAX_BAND_CROSSINGS
+  #define PID_AUTOTUNE_MAX_BAND_CROSSINGS       4    // settle band crossings before a repeat is classed as hunting
+  #endif
+  #ifndef PID_AUTOTUNE_OUTLIER_MODZ_THRESHOLD
+  #define PID_AUTOTUNE_OUTLIER_MODZ_THRESHOLD   3.5  // standard Iglewicz-Hoaglin modified Z-score threshold
+  #endif
+  #ifndef PID_AUTOTUNE_PRELOAD_DISTANCE
+  #define PID_AUTOTUNE_PRELOAD_DISTANCE         AUTO // degrees, unmeasured same-direction backlash take-up nudge
+                                                     // before every measured move; AUTO = max(2x backlash, 10x settle band)
+  #endif
+  #ifndef PID_AUTOTUNE_SPEED_TEST
+  #define PID_AUTOTUNE_SPEED_TEST               ON   // measure the physical maximum rotation rate at the start of a run
+  #endif
+  #ifndef PID_AUTOTUNE_SPEED_TEST_DISTANCE
+  #define PID_AUTOTUNE_SPEED_TEST_DISTANCE      AUTO // degrees; AUTO = 3x PID_AUTOTUNE_TEST_DISTANCE
+  #endif
+  #ifndef PID_AUTOTUNE_SPEED_TEST_RATE
+  #define PID_AUTOTUNE_SPEED_TEST_RATE          AUTO // deg/s commanded during the speed test; AUTO = 2x the test slew rate
+  #endif
+  #ifndef PID_AUTOTUNE_SPEED_SATURATION_PERCENT
+  #define PID_AUTOTUNE_SPEED_SATURATION_PERCENT 90   // drive output percent at/above which the drive counts as saturated
+  #endif
+  #ifndef PID_AUTOTUNE_SPEED_HEADROOM_PERCENT
+  #define PID_AUTOTUNE_SPEED_HEADROOM_PERCENT   85   // recommended operating max as a percent of the measured maximum
+  #endif
+#endif
