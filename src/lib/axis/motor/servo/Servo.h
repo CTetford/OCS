@@ -23,6 +23,14 @@
   #define SERVO_SLEWING_TO_TRACKING_DELAY 3000 // in milliseconds
 #endif
 
+// which of the three safety detectors latched a shutdown
+enum ServoSafetyCause: uint8_t { SSC_NONE, SSC_STALL, SSC_RUNAWAY, SSC_OSCILLATION };
+
+#ifndef SERVO_SAFETY_OSCILLATION_CROSSINGS
+  // excursions past +/-33% power in one 2 second check before calling it oscillation; an ordinary
+  // move makes two, one accelerating and one braking, so the threshold has to be above that
+  #define SERVO_SAFETY_OSCILLATION_CROSSINGS 4
+#endif
 #ifndef SERVO_SAFETY_STALL_POWER
   #define SERVO_SAFETY_STALL_POWER 33 // in percent
 #endif
@@ -110,6 +118,15 @@ class ServoMotor : public Motor {
     // true if the feedback uses auto scaled parameter selection (pure param4-6 during slews,)
     // required by the PID auto-tune which measures and corrects that gain set
     inline bool feedbackAutoScales() { return feedback->autoScaleParameters; }
+
+    // true while a stall/runaway/oscillation shutdown is latched.  getDriverStatus() folds this into
+    // .fault with real hardware faults, so telling "the gains tripped a detector" from "the driver is
+    // broken" means asking here
+    inline bool inSafetyShutdown() { return safetyShutdown; }
+
+    // which detector latched it.  a stall means the axis did not move at all, so unlike the other two
+    // it is not evidence that the gains are too high
+    inline ServoSafetyCause safetyCause() { return shutdownCause; }
 
     #ifdef ABSOLUTE_ENCODER_CALIBRATION
       void calibrate(float value);
@@ -210,10 +227,12 @@ class ServoMotor : public Motor {
     uint32_t encoderOrigin = 0;
     bool encoderReverse = false;
     bool encoderReverseDefault = false;
-    bool wasAbove33 = false;
-    bool wasBelow33 = false;
+    int8_t powerSign = 0;               // last power excursion seen: +1 above +33%, -1 below -33%
+    uint8_t powerCrossings = 0;         // excursions this check period, for the oscillation detector
     bool safetyShutdown = false;
-    long lastTargetDistance = 0;
+    ServoSafetyCause shutdownCause = SSC_NONE;
+    long lastTargetDistance = -1;       // distance to target at the last check, -1 = none yet
+    uint8_t runawayCount = 0;           // consecutive checks moving away from target at full power
 };
 
 #endif

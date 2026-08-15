@@ -6,6 +6,40 @@
 #ifdef DOME_PRESENT
 
 #include "../roof/Roof.h"
+#include "../../lib/nv/Nv.h"
+
+#ifdef SERVO_PID_AUTOTUNE_PRESENT
+  // persist an auto-tune backlash measurement as this axis' backlash compensation
+  void Dome::applyMeasuredBacklash(int axisNum, float measured) {
+    if (isnan(measured) || measured <= 0.0F) {
+      VF("MSG: Dome, no backlash measurement to apply for axis"); VL(axisNum);
+      return;
+    }
+
+    // Dome::init() rejects anything outside 0..10 degrees and silently zeroes it, so clamp here
+    // rather than write a value that would be thrown away (with an error) on the next boot
+    if (measured > 10.0F) {
+      DF("WRN: Dome, measured backlash "); D(measured); DLF(" deg exceeds the 10 deg limit, clamping");
+      measured = 10.0F;
+    }
+
+    if (axisNum == 1) {
+      settings.backlash.azimuth = measured;
+      axis1.setBacklash(measured);
+    }
+    #if AXIS2_DRIVER_MODEL != OFF
+      else if (axisNum == 2) {
+        settings.backlash.altitude = measured;
+        axis2.setBacklash(measured);
+      }
+    #endif
+    else return;
+
+    nv.updateBytes(NV_DOME_SETTINGS_BASE, &settings, sizeof(DomeSettings));
+    VF("MSG: Dome, axis"); V(axisNum); VF(" backlash compensation set to "); V(measured);
+    VLF(" deg and saved to NV (survives a reboot, unlike the PID gains)");
+  }
+#endif
 
 bool Dome::command(char reply[], char command[], char parameter[], bool *supressFrame, bool *numericReply, CommandError *commandError) {
 
@@ -156,12 +190,27 @@ bool Dome::command(char reply[], char command[], char parameter[], bool *supress
         #endif
         if (settings.park.state >= PS_PARKED) { *commandError = CE_SLEW_ERR_IN_PARK; return true; }
       }
+
+      // the apply form (:SXT[n],2#) also commits the run's backlash measurement, which the axis
+      // layer cannot do: the value lives in the dome's NV settings
+      bool autoTuneApplyForm = command[0] == 'S' && command[1] == 'X' && parameter[0] == 'T' &&
+                               parameter[2] == ',' && parameter[3] == '2' && parameter[4] == 0;
     #endif
 
     // give the axes a shot at otherwise unhandled commands (:GXA/:SXA/:GXS/:GXU/:SXT/:GXT)
-    if (axis1.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    if (axis1.command(reply, command, parameter, supressFrame, numericReply, commandError)) {
+      #ifdef SERVO_PID_AUTOTUNE_PRESENT
+        if (autoTuneApplyForm && *commandError == CE_NONE) applyMeasuredBacklash(1, axis1.getAutoTuneBacklash());
+      #endif
+      return true;
+    }
     #if AXIS2_DRIVER_MODEL != OFF
-      if (axis2.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+      if (axis2.command(reply, command, parameter, supressFrame, numericReply, commandError)) {
+        #ifdef SERVO_PID_AUTOTUNE_PRESENT
+          if (autoTuneApplyForm && *commandError == CE_NONE) applyMeasuredBacklash(2, axis2.getAutoTuneBacklash());
+        #endif
+        return true;
+      }
     #endif
     return false;
   }

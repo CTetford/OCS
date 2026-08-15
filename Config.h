@@ -259,6 +259,11 @@
 
 #define DOME_SHUTTER_LOCK             OFF //    OFF, ON to disable dome motion unless shutter is open.                        Option
 
+// Servo PID auto-tune. ON enables the :SXT/:GXT commands, which measure the axis and tune the
+// slewing/goto gain set (AXIS[n]_PID_*_GOTO) in place. Results are staged in RAM until applied.
+// Advanced settings for a run are all in src/Config.defaults.h; see docs/PID-Autotune-HowTo.md.
+#define SERVO_PID_AUTOTUNE            OFF //    OFF, ON enables the PID auto-tune commands.                                   Option
+
 // Usually this will be a GENERIC stepper driver or a servo SERVO_PE (Phase/Enable) or SERVO_EE (Enable/Enable)
 #define AXIS1_DRIVER_MODEL            OFF //    OFF, Enter driver model (above) to activate the dome Azimuth axis.            Option
 #define AXIS1_DRIVER_MICROSTEPS       OFF //    OFF, n. Microstep mode when tracking.                                         Option
@@ -269,6 +274,16 @@
 #define AXIS1_PID_P                   2.0 //    2.0, Proportional; scale of immediate response to position error.             Adjust
 #define AXIS1_PID_I                   5.0 //    5.0, Integral; rate of increasing response to position error over time.       Adjust
 #define AXIS1_PID_D                   1.0 //    1.0, Derivative; overshoot supression.                                        Adjust
+
+// The slewing/goto gain set. Defaults to the tracking gains above. SERVO_PID_AUTOTUNE measures and
+// tunes these three only; it never touches the tracking set.
+#define AXIS1_PID_P_GOTO      AXIS1_PID_P //  AXIS1_PID_P, Proportional during slews and gotos.                               Adjust
+#define AXIS1_PID_I_GOTO      AXIS1_PID_I //  AXIS1_PID_I, Integral during slews and gotos.                                   Adjust
+#define AXIS1_PID_D_GOTO      AXIS1_PID_D //  AXIS1_PID_D, Derivative during slews and gotos.                                 Adjust
+
+#define AXIS1_TARGET_TOLERANCE        0.0 //    0.0, n. (degrees) Goto arrival tolerance. 0.0 requires an exact encoder count Adjust
+                                          //         match, which a high backlash axis may hunt around; set near the
+                                          //         mechanical backlash width so gotos terminate cleanly.
 
 #define AXIS1_SLEW_RATE_DESIRED       1.0 //    1.0, n, (degrees/second) Maximum speed depends on processor.                  Adjust
 
@@ -298,6 +313,12 @@
 #define AXIS2_PID_P                   2.0 //    2.0, Proportional; scale of immediate response to position error.             Adjust
 #define AXIS2_PID_I                   5.0 //    5.0, Integral; rate of increasing response to position error over time.       Adjust
 #define AXIS2_PID_D                   1.0 //    1.0, Derivative; overshoot supression.                                        Adjust
+
+#define AXIS2_PID_P_GOTO      AXIS2_PID_P //  AXIS2_PID_P, Proportional during slews and gotos.                               Adjust
+#define AXIS2_PID_I_GOTO      AXIS2_PID_I //  AXIS2_PID_I, Integral during slews and gotos.                                   Adjust
+#define AXIS2_PID_D_GOTO      AXIS2_PID_D //  AXIS2_PID_D, Derivative during slews and gotos.                                 Adjust
+
+#define AXIS2_TARGET_TOLERANCE        0.0 //    0.0, n. (degrees) Goto arrival tolerance, as AXIS1_TARGET_TOLERANCE.          Adjust
 
 #define AXIS2_SLEW_RATE_DESIRED       1.0 //    1.0, n, (degrees/second) Maximum speed depends on processor.                  Adjust
 

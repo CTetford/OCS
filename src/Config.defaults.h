@@ -750,29 +750,120 @@
   #define PID_AUTOTUNE_MAX_OVERSHOOT_COUNTS     AUTO // acceptance, in encoder counts; AUTO = 2x settle band
   #endif
   #ifndef PID_AUTOTUNE_SETTLE_TOLERANCE_COUNTS
-  #define PID_AUTOTUNE_SETTLE_TOLERANCE_COUNTS  AUTO // settle band, in encoder counts; AUTO = max(1.5x backlash, 2)
-  #endif
+  #define PID_AUTOTUNE_SETTLE_TOLERANCE_COUNTS  AUTO // settle band, in encoder counts; AUTO = max(1.5x backlash, 2).
+  #endif                                            // this is the positioning dead band, NOT the stability
+                                                    // threshold - see PID_AUTOTUNE_DITHER_WOBBLE_FACTOR
   #ifndef PID_AUTOTUNE_SETTLE_CONFIRM_MS
   #define PID_AUTOTUNE_SETTLE_CONFIRM_MS        1000 // position must hold still this long to count as settled
   #endif
   #ifndef PID_AUTOTUNE_MAX_SETTLE_MS
-  #define PID_AUTOTUNE_MAX_SETTLE_MS            2000 // acceptance, time from move start to settled
-  #endif
+  #define PID_AUTOTUNE_MAX_SETTLE_MS            2000 // acceptance, time from goto completion to settled.  measured
+  #endif                                            // from arrival, not from move start, so it does not scale
+                                                    // with the test distance
+  #ifndef PID_AUTOTUNE_MAX_TEST_DISTANCE
+  #define PID_AUTOTUNE_MAX_TEST_DISTANCE        30.0 // degrees, ceiling on the test distance the measured dead
+  #endif                                            // band may demand; keeps a run bounded on a high-lash drive
+  #ifndef PID_AUTOTUNE_MIN_DISTANCE_BANDS
+  #define PID_AUTOTUNE_MIN_DISTANCE_BANDS       10   // test distance must be at least this many settle bands, so
+  #endif                                            // overshoot has dynamic range against lash and quantization
   #ifndef PID_AUTOTUNE_MOVE_TIMEOUT_MS
   #define PID_AUTOTUNE_MOVE_TIMEOUT_MS          AUTO // per-move watchdog; AUTO = 4x expected move time + 8s
   #endif
-  #ifndef PID_AUTOTUNE_MAX_ITERATIONS
-  #define PID_AUTOTUNE_MAX_ITERATIONS           6    // correction rounds before giving up
-  #endif
+  #ifndef PID_AUTOTUNE_GAIN_MARGIN_PERCENT
+  #define PID_AUTOTUNE_GAIN_MARGIN_PERCENT      15   // Kp is backed off by this much before the result is
+  #endif                                            // staged, but ONLY when the search found the optimum
+                                                    // sitting against a cliff - a Kp+ probe from it hunted or
+                                                    // tripped a safety detector.  an interior optimum is
+                                                    // staged as found, since derating it would simply move
+                                                    // the result off the point the run paid for.  0 disables
   #ifndef PID_AUTOTUNE_REPEATS
-  #define PID_AUTOTUNE_REPEATS                  5    // measured moves per round
+  #define PID_AUTOTUNE_REPEATS                  5    // measured moves per evaluation in the fine regime, and
+  #endif                                            // the size of the sample arrays
+
+  // ---------------------------------------------------------------------------------------------
+  // the gain search: an opportunistic compass search (Hooke-Jeeves) over Kp/Ki/Kd.
+  //
+  // from the incumbent gain set the search probes its neighbours one at a time - each parameter up
+  // and down by the current step - and moves to the FIRST probe that improves the score.  when no
+  // probe improves, the step is halved and the poll repeats, so the search covers ground quickly at
+  // first and resolves finely near the optimum.  it needs no gradient, which matters because these
+  // measurements are noisy and the numerical derivative of noise is meaningless.
+  #ifndef PID_AUTOTUNE_TUNE_KI
+  #define PID_AUTOTUNE_TUNE_KI                  ON   // include Ki in the search
   #endif
-  #ifndef PID_AUTOTUNE_GAIN_STEP_LIMIT_PERCENT
-  #define PID_AUTOTUNE_GAIN_STEP_LIMIT_PERCENT  40   // max gain change per round in percent
+  #ifndef PID_AUTOTUNE_TUNE_KD
+  #define PID_AUTOTUNE_TUNE_KD                  ON   // include Kd in the search.  with both OFF the search
+  #endif                                            // reduces to Kp only
+  #ifndef PID_AUTOTUNE_STEP_INITIAL_PERCENT
+  #define PID_AUTOTUNE_STEP_INITIAL_PERCENT     40   // starting step, as a percent of each gain
   #endif
+  #ifndef PID_AUTOTUNE_STEP_MIN_PERCENT
+  #define PID_AUTOTUNE_STEP_MIN_PERCENT         5    // the search stops once the step falls below this.  going
+  #endif                                            // finer than the drive's own repeatability just chases
+                                                    // measurement scatter
+  #ifndef PID_AUTOTUNE_STEP_SHRINK_PERCENT
+  #define PID_AUTOTUNE_STEP_SHRINK_PERCENT      50   // step multiplier when a full poll finds no improvement
+  #endif
+  #ifndef PID_AUTOTUNE_MAX_EVALUATIONS
+  #define PID_AUTOTUNE_MAX_EVALUATIONS          28   // hard cap on measured evaluations; bounds the run time
+  #endif
+  #ifndef PID_AUTOTUNE_COARSE_REPEATS
+  #define PID_AUTOTUNE_COARSE_REPEATS           3    // measured moves per evaluation while the step is still
+  #endif                                            // coarse.  early probes only need to rank candidates, not
+                                                    // measure them precisely, and this is most of the run
+  #ifndef PID_AUTOTUNE_COARSE_STEP_PERCENT
+  #define PID_AUTOTUNE_COARSE_STEP_PERCENT      20   // steps at or above this use COARSE_REPEATS, below it the
+  #endif                                            // full PID_AUTOTUNE_REPEATS
+  #ifndef PID_AUTOTUNE_IMPROVE_PERCENT
+  #define PID_AUTOTUNE_IMPROVE_PERCENT          5    // a probe must beat the incumbent's score by this much to
+  #endif                                            // be accepted.  this is the noise guard: repeat-to-repeat
+                                                    // scatter is real, and without a margin the search walks
+                                                    // around chasing it instead of converging
+  // score weights.  each term is a measured value over its acceptance threshold, so 1/1/1 means the
+  // three are equally bad at their limits.  raise RESIDUAL to favour final accuracy over speed, or
+  // SETTLE for the reverse
+  #ifndef PID_AUTOTUNE_WEIGHT_OVERSHOOT
+  #define PID_AUTOTUNE_WEIGHT_OVERSHOOT         1.0
+  #endif
+  #ifndef PID_AUTOTUNE_WEIGHT_SETTLE
+  #define PID_AUTOTUNE_WEIGHT_SETTLE            1.0
+  #endif
+  #ifndef PID_AUTOTUNE_WEIGHT_RESIDUAL
+  #define PID_AUTOTUNE_WEIGHT_RESIDUAL          1.0
+  #endif
+  #ifndef PID_AUTOTUNE_HUNTING_PENALTY
+  #define PID_AUTOTUNE_HUNTING_PENALTY          10.0 // added to the score of a hunting evaluation, large enough
+  #endif                                            // that no hunting set can ever win on its other merits
+
+  // absolute minimum probe step per parameter.  the step is a percentage of the gain, so without a
+  // floor a gain that reaches 0 could never move again - and Ki and Kd are both legitimately 0
+  #ifndef PID_AUTOTUNE_MIN_STEP_KP
+  #define PID_AUTOTUNE_MIN_STEP_KP              0.05
+  #endif
+  #ifndef PID_AUTOTUNE_MIN_STEP_KI
+  #define PID_AUTOTUNE_MIN_STEP_KI              0.05
+  #endif
+  #ifndef PID_AUTOTUNE_MIN_STEP_KD
+  #define PID_AUTOTUNE_MIN_STEP_KD              0.02
+  #endif
+  // ---------------------------------------------------------------------------------------------
+
   #ifndef PID_AUTOTUNE_SAFETY_BACKOFF_PERCENT
   #define PID_AUTOTUNE_SAFETY_BACKOFF_PERCENT   50   // gain reduction (to this percent) after a servo safety shutdown
   #endif
+  #ifndef PID_AUTOTUNE_MAX_SHUTDOWNS
+  #define PID_AUTOTUNE_MAX_SHUTDOWNS            4    // servo safety shutdowns tolerated in one run before
+  #endif                                            // giving up.  this budget covers stalls and trips the
+                                                    // search cannot attribute to a candidate - NOT probes
+                                                    // that trip, which have their own allowance below
+  #ifndef PID_AUTOTUNE_MAX_INFEASIBLE_PROBES
+  #define PID_AUTOTUNE_MAX_INFEASIBLE_PROBES    10   // probes that trip a detector and are discarded as
+  #endif                                            // infeasible.  a separate, larger budget on purpose:
+                                                    // finding the edge of the feasible region is the search
+                                                    // WORKING, not failing, and with three parameters it
+                                                    // happens routinely.  sharing one budget with stalls
+                                                    // means a couple of honest probes leave no allowance
+                                                    // for the mechanical events that really are faults
   #ifndef PID_AUTOTUNE_MAX_BAND_CROSSINGS
   #define PID_AUTOTUNE_MAX_BAND_CROSSINGS       4    // settle band crossings before a repeat is classed as hunting
   #endif
@@ -781,8 +872,8 @@
   #endif
   #ifndef PID_AUTOTUNE_PRELOAD_DISTANCE
   #define PID_AUTOTUNE_PRELOAD_DISTANCE         AUTO // degrees, unmeasured same-direction backlash take-up nudge
-                                                     // before every measured move; AUTO = max(2x backlash, 10x settle band)
-  #endif
+  #endif                                            // before every measured move; AUTO = max(2x backlash, 4x wobble).
+                                                    // driven by the lash it exists to take up, never by the band
   #ifndef PID_AUTOTUNE_SPEED_TEST
   #define PID_AUTOTUNE_SPEED_TEST               ON   // measure the physical maximum rotation rate at the start of a run
   #endif
@@ -790,12 +881,72 @@
   #define PID_AUTOTUNE_SPEED_TEST_DISTANCE      AUTO // degrees; AUTO = 3x PID_AUTOTUNE_TEST_DISTANCE
   #endif
   #ifndef PID_AUTOTUNE_SPEED_TEST_RATE
-  #define PID_AUTOTUNE_SPEED_TEST_RATE          AUTO // deg/s commanded during the speed test; AUTO = 2x the test slew rate
-  #endif
+  #define PID_AUTOTUNE_SPEED_TEST_RATE          AUTO // deg/s commanded during the speed test; AUTO = 4x the test
+  #endif                                            // slew rate.  the test can only discover a ceiling below what
+                                                    // it commands, so this has to be comfortably unattainable - at
+                                                    // 2x it merely confirms the rate it was given, and a drive that
+                                                    // is much weaker one way looks symmetric because neither
+                                                    // direction was pushed hard enough to expose the difference
   #ifndef PID_AUTOTUNE_SPEED_SATURATION_PERCENT
   #define PID_AUTOTUNE_SPEED_SATURATION_PERCENT 90   // drive output percent at/above which the drive counts as saturated
   #endif
   #ifndef PID_AUTOTUNE_SPEED_HEADROOM_PERCENT
   #define PID_AUTOTUNE_SPEED_HEADROOM_PERCENT   85   // recommended operating max as a percent of the measured maximum
+  #endif
+
+  // mechanical backlash and hold-dither measurement, runs before everything else in a run.  the AUTO
+  // geometry above (settle band, overshoot limit, preload, minimum test distance) is derived from the
+  // lash, and the stability threshold from the dither, so without a measurement they fall back to a
+  // 2 count floor that no real drive can settle inside - which shows up as a settle timeout rather
+  // than as a tuning result
+  #ifndef PID_AUTOTUNE_BACKLASH_TEST
+  #define PID_AUTOTUNE_BACKLASH_TEST            ON   // measure mechanical backlash at the start of a run
+  #endif
+  #ifndef PID_AUTOTUNE_BACKLASH_PROBES
+  #define PID_AUTOTUNE_BACKLASH_PROBES          5    // reversal probes, aggregated; direction alternates
+  #endif
+  #ifndef PID_AUTOTUNE_BACKLASH_PROBE_DISTANCE
+  #define PID_AUTOTUNE_BACKLASH_PROBE_DISTANCE  AUTO // degrees per probe leg; AUTO = max(1.0, test distance/5)
+  #endif
+  #ifndef PID_AUTOTUNE_BACKLASH_PROBE_RATE
+  #define PID_AUTOTUNE_BACKLASH_PROBE_RATE      AUTO // deg/s; AUTO = 25% of the test slew rate.  slow keeps the
+  #endif                                            // following-error term in the measurement small
+  #ifndef PID_AUTOTUNE_BACKLASH_DETECT_COUNTS
+  #define PID_AUTOTUNE_BACKLASH_DETECT_COUNTS   8    // floor for the counts of reverse motion that count as "the
+  #endif                                            // load broke away"; the measured dither raises it as needed
+  #ifndef PID_AUTOTUNE_BACKLASH_MAX_COUNTS
+  #define PID_AUTOTUNE_BACKLASH_MAX_COUNTS      AUTO // sanity ceiling on a probe; AUTO = half the probe distance
+  #endif
+  #ifndef PID_AUTOTUNE_BACKLASH_QUIET_MS
+  #define PID_AUTOTUNE_BACKLASH_QUIET_MS        2000 // minimum settling delay after a probe leg stops, before
+  #endif                                            // dither is sampled.  must outlast both the post-arrival
+                                                    // coast and the drive's own output ramp, or the axis is
+                                                    // still recovering when the reversal is snapshotted
+  #ifndef PID_AUTOTUNE_BACKLASH_DITHER_MS
+  #define PID_AUTOTUNE_BACKLASH_DITHER_MS       500  // sampling window for the peak-to-peak hold dither
+  #endif
+  #ifndef PID_AUTOTUNE_BACKLASH_QUIET_RETRIES
+  #define PID_AUTOTUNE_BACKLASH_QUIET_RETRIES   3    // extra dither windows allowed while net drift still
+  #endif                                            // dominates the wander, i.e. the axis has not settled
+  #ifndef PID_AUTOTUNE_BACKLASH_PROBE_RETRIES
+  #define PID_AUTOTUNE_BACKLASH_PROBE_RETRIES   3    // retries of a probe that tripped a servo safety
+  #endif                                            // detector.  low-speed oscillation is intermittent, so
+                                                    // a plain retry on the same terms beats changing them
+  #ifndef PID_AUTOTUNE_DITHER_WOBBLE_FACTOR
+  #define PID_AUTOTUNE_DITHER_WOBBLE_FACTOR     2    // stability threshold as a multiple of the measured dither.
+  #endif                                            // kept separate from the settle band: coupling them forced
+                                                    // the band, and so the test distance, up with the noise floor
+
+  // the coarse regime fills only part of the sample arrays, so it can never ask for more
+  #if PID_AUTOTUNE_COARSE_REPEATS > PID_AUTOTUNE_REPEATS
+    #undef PID_AUTOTUNE_COARSE_REPEATS
+    #define PID_AUTOTUNE_COARSE_REPEATS         PID_AUTOTUNE_REPEATS
+  #endif
+
+  // sample arrays are shared between tuning rounds and backlash probes
+  #if PID_AUTOTUNE_BACKLASH_PROBES > PID_AUTOTUNE_REPEATS
+    #define PID_AUTOTUNE_SAMPLE_MAX             PID_AUTOTUNE_BACKLASH_PROBES
+  #else
+    #define PID_AUTOTUNE_SAMPLE_MAX             PID_AUTOTUNE_REPEATS
   #endif
 #endif

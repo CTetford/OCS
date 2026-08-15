@@ -155,6 +155,14 @@ class Dome {
     bool ready = false;
 
   private:
+    #ifdef SERVO_PID_AUTOTUNE_PRESENT
+      // persist an auto-tune backlash measurement as this axis' backlash compensation.  unlike the
+      // axis PID settings, dome settings have no revert-to-Config.h gate, so this survives a reboot
+      // \param axisNum: 1 for azimuth, 2 for altitude
+      // \param measured: backlash in degrees, or NAN to leave the stored value alone
+      void applyMeasuredBacklash(int axisNum, float measured);
+    #endif
+
     DomeSettings settings = {
       {PS_UNPARKED, 0.0F, 0.0F},
       {0.0F, 0.0F}

@@ -75,9 +75,12 @@ bool Axis::command(char *reply, char *command, char *parameter, bool *supressFra
 
     #ifdef SERVO_PID_AUTOTUNE_PRESENT
       // :GXT[n]#   Get axis PID auto-tune status
-      //            Returns: state,iteration,repeat,result,Kp,Ki,Kd,overshootCounts,settleMs,converged,maxRate,saturated
-      //            state: 0=idle 1=speed-test 2=preload 3=move 4=monitor 5=aggregate 6=analyze 7=done 8=failed
-      //            result: 0=none 1=converged 2=best-effort 3=aborted 4=timeout 5=fault 6=safety-shutdown 7=motion-error
+      //            Returns: state,evaluation,repeat,result,Kp,Ki,Kd,overshootCounts,settleMs,converged,maxRate,saturated
+      //            state: 0=idle 1=speed-test 2=preload 3=move 4=monitor 5=aggregate 6=analyze 7=done
+      //                   8=failed 9=backlash-test
+      //            result: 0=none 1=converged 2=best-effort 3=aborted 4=timeout 5=fault 6=safety-shutdown
+      //                    7=motion-error 8=backlash-measurement-failed
+      //            settleMs: from goto ARRIVAL to settled, so it does not scale with the test distance
       //            maxRate: measured physical maximum rotation rate in deg/s (0 if not measured)
       //            saturated: 1 if the drive output saturated during the speed test (maxRate is
       //            the true physical ceiling;) 0 means the true maximum is above maxRate
@@ -87,18 +90,24 @@ bool Axis::command(char *reply, char *command, char *parameter, bool *supressFra
         if (index + 1 != axisNumber) return false; // command wasn't processed
         if (motor->driverType != SERVO) { *commandError = CE_CMD_UNKNOWN; return true; } // not a servo
 
-        const float *gains = autoTuneStagedValid ? autoTuneStaged : autoTuneCandidate;
+        const float *gains = at.stagedValid ? at.staged : at.candidate;
         char kp[20], ki[20], kd[20], os[20], st[20], mr[20];
         sprintF(kp, "%0.3f", gains[0]);
         sprintF(ki, "%0.3f", gains[1]);
         sprintF(kd, "%0.3f", gains[2]);
-        sprintF(os, "%0.1f", autoTuneOvershootResult);
-        sprintF(st, "%0.0f", autoTuneSettleTimeResult);
-        sprintF(mr, "%0.3f", autoTuneMeasuredMaxRate);
-        sprintf(reply, "%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s,%d",
-          (int)autoTuneState, (int)autoTuneIteration, (int)autoTuneRepeat, (int)autoTuneResult,
-          kp, ki, kd, os, st, (int)(autoTuneResult == ATR_CONVERGED),
-          mr, (int)autoTuneSpeedSaturated);
+        sprintF(os, "%0.0f", at.overshootResult);
+        sprintF(st, "%0.0f", at.settleTimeResult);
+        sprintF(mr, "%0.2f", at.measuredMaxRate);
+
+        // built here then copied bounded: PID_MAX_GAIN allows gains wide enough that a direct
+        // write could overrun the caller's reply.  field 2 counts search evaluations
+        char t[256];
+        snprintf(t, sizeof(t), "%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s,%d",
+          (int)at.state, (int)at.evalCount, (int)at.repeat, (int)at.result,
+          kp, ki, kd, os, st, (int)(at.result == ATR_CONVERGED),
+          mr, (int)at.speedSaturated);
+        strncpy(reply, t, 44);
+        reply[44] = 0;
         *numericReply = false;
       } else
     #endif

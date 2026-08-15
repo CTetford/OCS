@@ -134,7 +134,7 @@ void ServoMotor::enable(bool state) {
   if (!ready) return;
 
   driver->enable(state);
-  if (state == false) feedback->reset(); else safetyShutdown = false;
+  if (state == false) feedback->reset(); else { safetyShutdown = false; shutdownCause = SSC_NONE; }
   enabled = state;
 }
 
@@ -408,8 +408,14 @@ void ServoMotor::poll() {
     feedback->variableParameters(fabs(velocityPercent));
   }
 
-  if (velocityPercent < -33) wasBelow33 = true;
-  if (velocityPercent > 33) wasAbove33 = true;
+  // count excursions past +/-33% power rather than just noting both happened: an ordinary move makes
+  // two, accelerating and braking, so "one of each" fires on any move that fits in one check period
+  if (velocityPercent > 33) {
+    if (powerSign != 1) { powerSign = 1; powerCrossings++; }
+  } else
+  if (velocityPercent < -33) {
+    if (powerSign != -1) { powerSign = -1; powerCrossings++; }
+  }
 
   if (millis() - lastCheckTime > 2000) {
 
@@ -421,28 +427,42 @@ void ServoMotor::poll() {
         DF(", control->out = "); D(control->out); DF(", velocity % = "); DL(velocityPercent);
         enable(false);
         safetyShutdown = true;
+        shutdownCause = SSC_STALL;
       }
 
-      // if above 90% power and we're moving away from the target something is seriously wrong, so shut it down
-      if (labs(encoderCounts - lastEncoderCounts) > lastTargetDistance && abs(velocityPercent) >= 90) {
+      // if above 90% power and we're moving away from the target something is seriously wrong, so shut it down.
+      // compares the distance TO THE TARGET between checks; the distance travelled only says the axis is
+      // accelerating, which any hard goto does at full power.  two consecutive checks, so that one window of
+      // overshoot recovery - braking hard, briefly moving away - is not mistaken for a runaway
+      long targetDistance;
+      noInterrupts();
+      targetDistance = labs(targetSteps - encoderCounts);
+      interrupts();
+
+      if (lastTargetDistance >= 0 && targetDistance > lastTargetDistance && abs(velocityPercent) >= 90) runawayCount++; else runawayCount = 0;
+      if (runawayCount >= 2) {
         DF("WRN:"); D(axisPrefix); DF("runaway detected!");
-        DLF(" > 90% power while moving away from the target!");
+        DF(" > 90% power while moving away from the target! distance "); D(lastTargetDistance);
+        DF(" -> "); DL(targetDistance);
         enable(false);
         safetyShutdown = true;
+        shutdownCause = SSC_RUNAWAY;
+        runawayCount = 0;
       }
-      lastTargetDistance = labs(encoderCounts - lastEncoderCounts);
+      lastTargetDistance = targetDistance;
 
-      // if we were below -33% and above 33% power in a one second period something is seriously wrong, so shut it down
-      if (wasBelow33 && wasAbove33) {
-        DF("WRN:"); D(axisPrefix); DF("oscillation detected!");
-        DLF(" below -33% and above 33% power in a 2 second period!");
+      // repeatedly slamming power between below -33% and above 33% is oscillation; once is just a move
+      if (powerCrossings >= SERVO_SAFETY_OSCILLATION_CROSSINGS) {
+        DF("WRN:"); D(axisPrefix); DF("oscillation detected! ");
+        D(powerCrossings); DLF(" swings past +/-33% power in a 2 second period!");
         enable(false);
         safetyShutdown = true;
+        shutdownCause = SSC_OSCILLATION;
       }
     #endif
 
-    wasAbove33 = false;
-    wasBelow33 = false;
+    powerCrossings = 0;
+    powerSign = 0;
     lastEncoderCounts = encoderCounts;
     lastCheckTime = millis();
   }
