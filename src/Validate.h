@@ -481,6 +481,14 @@
   #error "Configuration (Config.h): AXIS1_ENCODER unknown encoder type."
 #endif
 
+#if AXIS1_DRIVER_MODEL >= SERVO_DRIVER_FIRST && AXIS1_ENCODER == OFF
+  #error "Configuration (Config.h): a SERVO AXIS1_DRIVER_MODEL requires an AXIS1_ENCODER setting (AB, CW_CCW, PULSE_DIR, PULSE_ONLY, SERIAL_BRIDGE.)"
+#endif
+
+#if AXIS2_DRIVER_MODEL >= SERVO_DRIVER_FIRST && AXIS2_ENCODER == OFF
+  #error "Configuration (Config.h): a SERVO AXIS2_DRIVER_MODEL requires an AXIS2_ENCODER setting (AB, CW_CCW, PULSE_DIR, PULSE_ONLY, SERIAL_BRIDGE.)"
+#endif
+
 #if AXIS1_DRIVER_MODEL == OFF && AXIS2_DRIVER_MODEL != OFF
   #error "Configuration (Config.h): Enabling AXIS2_DRIVER_MODEL requires an AXIS1_DRIVER_MODEL setting."
 #endif
